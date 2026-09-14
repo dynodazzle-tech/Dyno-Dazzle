@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { SITE_CONFIG, getWhatsAppUrl } from '../config/site';
 import { ContactFormData, ContactApiResponse } from '../types';
+import { apiFetch } from '../utils/api';
 import {
   Send,
   Loader2,
@@ -130,7 +131,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ initialService }
     setIsSubmitting(true);
 
     try {
-      const response = await fetch('/api/contact', {
+      const response = await apiFetch<ContactApiResponse>('/api/contact', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -138,16 +139,16 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ initialService }
         body: JSON.stringify(formData),
       });
 
-      const data = await response.json();
+      const data = response.data;
 
-      if (response.ok && data.success) {
+      if (response.ok && data?.success) {
         setSubmissionResult(data);
       } else {
-        if (data.errors) {
+        if (data?.errors) {
           setFieldErrors(data.errors);
         } else {
           setNetworkError(
-            data.message ||
+            data?.message ||
               'Something went wrong while sending your enquiry. Please try again or contact us on WhatsApp.'
           );
         }

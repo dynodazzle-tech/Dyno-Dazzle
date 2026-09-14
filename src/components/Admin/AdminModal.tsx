@@ -29,8 +29,18 @@ import {
   Building,
   Tag,
   ChevronDown,
+  Globe,
+  Server,
+  Wifi,
 } from 'lucide-react';
 import { ProjectItem, EnquiryItem, SiteSettings } from '../../types';
+import {
+  apiFetch,
+  getApiBaseUrl,
+  setApiBaseUrl,
+  CLOUD_RUN_BACKEND_URL,
+  testBackendConnection,
+} from '../../utils/api';
 
 interface AdminModalProps {
   isOpen: boolean;
@@ -103,9 +113,38 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
     }
   }, [authToken, isOpen, activeTab]);
 
+  // Active backend configuration
+  const [activeBackend, setActiveBackend] = useState<string>(() => getApiBaseUrl());
+  const [testingBackend, setTestingBackend] = useState(false);
+  const [backendTestStatus, setBackendTestStatus] = useState<string | null>(null);
+
+  const handleSwitchBackend = (url: string) => {
+    setApiBaseUrl(url);
+    setActiveBackend(url);
+    setBackendTestStatus(null);
+    setAuthError(null);
+  };
+
+  const handleTestBackend = async (url?: string) => {
+    setTestingBackend(true);
+    setBackendTestStatus(null);
+    try {
+      const res = await testBackendConnection(url);
+      if (res.connected) {
+        setBackendTestStatus(`Connected successfully (${res.platform || 'online'})`);
+      } else {
+        setBackendTestStatus(res.message);
+      }
+    } catch {
+      setBackendTestStatus('Connection failed');
+    } finally {
+      setTestingBackend(false);
+    }
+  };
+
   const verifyToken = async (token: string) => {
     try {
-      const res = await fetch('/api/admin/auth/me', {
+      const res = await apiFetch('/api/admin/auth/me', {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) {
@@ -127,17 +166,14 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
       const headers = { Authorization: `Bearer ${authToken}` };
 
       if (activeTab === 'enquiries') {
-        const res = await fetch('/api/admin/enquiries', { headers });
-        const json = await res.json();
-        if (json.success) setEnquiries(json.data || []);
+        const res = await apiFetch('/api/admin/enquiries', { headers });
+        if (res.ok && res.data?.success) setEnquiries(res.data.data || []);
       } else if (activeTab === 'projects') {
-        const res = await fetch('/api/admin/projects', { headers });
-        const json = await res.json();
-        if (json.success) setProjects(json.data || []);
+        const res = await apiFetch('/api/admin/projects', { headers });
+        if (res.ok && res.data?.success) setProjects(res.data.data || []);
       } else if (activeTab === 'settings') {
-        const res = await fetch('/api/admin/settings', { headers });
-        const json = await res.json();
-        if (json.success) setSettings(json.data || null);
+        const res = await apiFetch('/api/admin/settings', { headers });
+        if (res.ok && res.data?.success) setSettings(res.data.data || null);
       }
     } catch (err) {
       console.error('Error loading admin data:', err);
@@ -154,30 +190,28 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
     setAuthLoading(true);
 
     try {
-      const res = await fetch('/api/admin/auth/login', {
+      const res = await apiFetch('/api/admin/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: emailInput, password: passwordInput }),
       });
 
-      const data = await res.json();
-
-      if (!res.ok || !data.success) {
-        setAuthError(data.message || 'Login failed. Please verify credentials.');
+      if (!res.ok || !res.data?.success) {
+        setAuthError(res.data?.message || 'Login failed. Please verify credentials.');
         setAuthLoading(false);
         return;
       }
 
       // Move to OTP step
       setAuthStep('otp');
-      setAuthNotice(data.message || 'A 6-digit OTP has been sent to your Gmail.');
+      setAuthNotice(res.data.message || 'A 6-digit OTP has been sent to your Gmail.');
       setResendCooldown(60);
       setOtpInput(['', '', '', '', '', '']);
       setTimeout(() => {
         otpRefs.current[0]?.focus();
       }, 100);
     } catch {
-      setAuthError('Connection error. Please try again.');
+      setAuthError('Connection error. Please try again or switch to the live backend.');
     } finally {
       setAuthLoading(false);
     }
@@ -195,23 +229,21 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
     setAuthLoading(true);
 
     try {
-      const res = await fetch('/api/admin/auth/verify-otp', {
+      const res = await apiFetch('/api/admin/auth/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: emailInput, otp: cleanCode }),
       });
 
-      const data = await res.json();
-
-      if (!res.ok || !data.success) {
-        setAuthError(data.message || 'Invalid or expired verification code.');
+      if (!res.ok || !res.data?.success) {
+        setAuthError(res.data?.message || 'Invalid or expired verification code.');
         setAuthLoading(false);
         return;
       }
 
       // Success! Save token
-      localStorage.setItem('dyno_admin_token', data.token);
-      setAuthToken(data.token);
+      localStorage.setItem('dyno_admin_token', res.data.token);
+      setAuthToken(res.data.token);
       setAuthError(null);
       setAuthNotice(null);
     } catch {
@@ -297,21 +329,20 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
     setAuthLoading(true);
 
     try {
-      const res = await fetch('/api/admin/auth/resend-otp', {
+      const res = await apiFetch('/api/admin/auth/resend-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: emailInput }),
       });
-      const data = await res.json();
-      if (data.success) {
-        setAuthNotice(data.message || 'A fresh 6-digit verification code has been dispatched to your Gmail.');
+      if (res.ok && res.data?.success) {
+        setAuthNotice(res.data.message || 'A fresh 6-digit verification code has been dispatched to your Gmail.');
         setResendCooldown(60);
         setOtpInput(['', '', '', '', '', '']);
         setTimeout(() => {
           otpRefs.current[0]?.focus();
         }, 100);
       } else {
-        setAuthError(data.message || 'Failed to resend code.');
+        setAuthError(res.data?.message || 'Failed to resend code.');
       }
     } catch {
       setAuthError('Failed to resend code due to network.');
@@ -322,7 +353,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
 
   const handleLogout = () => {
     if (authToken) {
-      fetch('/api/admin/auth/logout', {
+      apiFetch('/api/admin/auth/logout', {
         method: 'POST',
         headers: { Authorization: `Bearer ${authToken}` },
       }).catch(() => {});
@@ -336,7 +367,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
   const handleStatusChange = async (enquiryId: string, newStatus: string) => {
     if (!authToken) return;
     try {
-      const res = await fetch(`/api/admin/enquiries/${enquiryId}`, {
+      const res = await apiFetch(`/api/admin/enquiries/${enquiryId}`, {
         method: 'PATCH',
         headers: {
           Authorization: `Bearer ${authToken}`,
@@ -357,7 +388,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
   const handleDeleteEnquiry = async (enquiryId: string) => {
     if (!authToken || !window.confirm('Are you sure you want to delete this enquiry record?')) return;
     try {
-      const res = await fetch(`/api/admin/enquiries/${enquiryId}`, {
+      const res = await apiFetch(`/api/admin/enquiries/${enquiryId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${authToken}` },
       });
@@ -387,7 +418,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
     setReplyStatusMsg(null);
 
     try {
-      const res = await fetch(`/api/admin/enquiries/${replyingEnquiry.id}/reply`, {
+      const res = await apiFetch(`/api/admin/enquiries/${replyingEnquiry.id}/reply`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${authToken}`,
@@ -400,8 +431,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
         }),
       });
 
-      const data = await res.json();
-      if (data.success) {
+      if (res.ok && res.data?.success) {
         setReplyStatusMsg({ type: 'success', text: `Email sent to ${replyingEnquiry.email} successfully!` });
         // Update state
         setEnquiries((prev) =>
@@ -411,7 +441,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
           setReplyingEnquiry(null);
         }, 1500);
       } else {
-        setReplyStatusMsg({ type: 'error', text: data.message || 'Failed to dispatch email.' });
+        setReplyStatusMsg({ type: 'error', text: res.data?.message || 'Failed to dispatch email.' });
       }
     } catch {
       setReplyStatusMsg({ type: 'error', text: 'Error dispatching reply email.' });
@@ -459,7 +489,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
       const url = isNew ? '/api/admin/projects' : `/api/admin/projects/${editingProject.id}`;
       const method = isNew ? 'POST' : 'PUT';
 
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method,
         headers: {
           Authorization: `Bearer ${authToken}`,
@@ -468,13 +498,12 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
         body: JSON.stringify(editingProject),
       });
 
-      const data = await res.json();
-      if (data.success) {
+      if (res.ok && res.data?.success) {
         setIsProjectModalOpen(false);
         setEditingProject(null);
         loadDashboardData();
       } else {
-        alert(data.message || 'Failed to save project');
+        alert(res.data?.message || 'Failed to save project');
       }
     } catch (err) {
       console.error('Failed to save project:', err);
@@ -487,7 +516,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
   const handleDeleteProject = async (projectId: string) => {
     if (!authToken || !window.confirm('Delete this project from portfolio?')) return;
     try {
-      const res = await fetch(`/api/admin/projects/${projectId}`, {
+      const res = await apiFetch(`/api/admin/projects/${projectId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${authToken}` },
       });
@@ -502,7 +531,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
   const handleToggleFeatured = async (p: ProjectItem) => {
     if (!authToken) return;
     try {
-      const res = await fetch(`/api/admin/projects/${p.id}`, {
+      const res = await apiFetch(`/api/admin/projects/${p.id}`, {
         method: 'PUT',
         headers: {
           Authorization: `Bearer ${authToken}`,
@@ -528,7 +557,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
     setSettingsStatusMsg(null);
 
     try {
-      const res = await fetch('/api/admin/settings', {
+      const res = await apiFetch('/api/admin/settings', {
         method: 'PUT',
         headers: {
           Authorization: `Bearer ${authToken}`,
@@ -536,8 +565,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
         },
         body: JSON.stringify(settings),
       });
-      const data = await res.json();
-      if (data.success) {
+      if (res.ok && res.data?.success) {
         setSettingsStatusMsg('Site settings updated live successfully!');
         setTimeout(() => setSettingsStatusMsg(null), 3500);
       }
@@ -639,9 +667,39 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
                   </div>
 
                   {authError && (
-                    <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4 shrink-0" />
-                      <span>{authError}</span>
+                    <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs space-y-2">
+                      <div className="flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                        <span className="leading-relaxed">{authError}</span>
+                      </div>
+                      <div className="pt-1 flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleSwitchBackend(CLOUD_RUN_BACKEND_URL);
+                            setAuthNotice('Switched to live backend. Click Continue to submit credentials.');
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/30 font-semibold text-[11px] flex items-center gap-1.5 transition-colors"
+                        >
+                          <Server className="w-3 h-3" />
+                          <span>⚡ Connect to Live Backend (Cloud Run)</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleTestBackend(activeBackend || undefined)}
+                          disabled={testingBackend}
+                          className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] transition-colors"
+                        >
+                          {testingBackend ? 'Testing...' : 'Test Connection'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {authNotice && (
+                    <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                      <span>{authNotice}</span>
                     </div>
                   )}
 
@@ -709,6 +767,51 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
                   <div className="p-3 rounded-xl bg-cyan-950/30 border border-cyan-500/20 text-[11px] text-cyan-300 text-center leading-relaxed">
                     🔒 Protected 2-Step Admin verification. Code dispatched directly via DynoDazzle Gmail to <strong className="text-white">dynodazzle@gmail.com</strong>.
                   </div>
+
+                  {/* Backend connection pill / selector */}
+                  <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+                    <div className="flex items-center gap-1.5">
+                      <Wifi className={`w-3.5 h-3.5 ${activeBackend ? 'text-emerald-400' : 'text-cyan-400'}`} />
+                      <span className="truncate max-w-[170px]" title={activeBackend || 'Direct / Netlify / Local'}>
+                        {activeBackend ? 'Live Backend (Cloud Run)' : 'Netlify / Same-Origin API'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {activeBackend ? (
+                        <button
+                          type="button"
+                          onClick={() => handleSwitchBackend('')}
+                          className="text-slate-400 hover:text-cyan-300 transition-colors underline"
+                        >
+                          Use Netlify API
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleSwitchBackend(CLOUD_RUN_BACKEND_URL)}
+                          className="text-cyan-400 hover:text-cyan-300 transition-colors underline"
+                        >
+                          Switch to Live Backend
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => handleTestBackend(activeBackend || undefined)}
+                        disabled={testingBackend}
+                        className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+                      >
+                        {testingBackend ? '...' : 'Test'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {backendTestStatus && (
+                    <div className="text-[11px] text-center text-cyan-300 bg-cyan-950/40 p-2 rounded-lg border border-cyan-500/20">
+                      {backendTestStatus}
+                    </div>
+                  )}
                 </form>
               ) : (
                 /* STEP 2: 6-DIGIT OTP VERIFICATION */

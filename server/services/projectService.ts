@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { getDataDir } from '../utils/dataDir';
 
 export interface ProjectItem {
   id: string;
@@ -20,8 +21,10 @@ export interface ProjectItem {
   updatedAt?: string;
 }
 
-const DATA_DIR = path.join(process.cwd(), 'data');
-const PROJECTS_FILE = path.join(DATA_DIR, 'projects.json');
+function getProjectsFile(): string {
+  const dir = getDataDir();
+  return path.join(dir, 'projects.json');
+}
 
 const DEFAULT_PROJECTS: ProjectItem[] = [
   {
@@ -115,18 +118,21 @@ const DEFAULT_PROJECTS: ProjectItem[] = [
 ];
 
 function ensureStorage(): void {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
-  if (!fs.existsSync(PROJECTS_FILE)) {
-    fs.writeFileSync(PROJECTS_FILE, JSON.stringify(DEFAULT_PROJECTS, null, 2), 'utf-8');
+  const projectsFile = getProjectsFile();
+  if (!fs.existsSync(projectsFile)) {
+    try {
+      fs.writeFileSync(projectsFile, JSON.stringify(DEFAULT_PROJECTS, null, 2), 'utf-8');
+    } catch (e) {
+      console.warn('[ProjectService] Failed to write initial projects:', e);
+    }
   }
 }
 
 export function getAllProjects(includeDrafts = false): ProjectItem[] {
   ensureStorage();
   try {
-    const raw = fs.readFileSync(PROJECTS_FILE, 'utf-8');
+    const projectsFile = getProjectsFile();
+    const raw = fs.readFileSync(projectsFile, 'utf-8');
     const items: ProjectItem[] = JSON.parse(raw || '[]');
     const filtered = includeDrafts ? items : items.filter((p) => p.status === 'active');
     return filtered.sort((a, b) => a.order - b.order);
@@ -152,7 +158,7 @@ export function createProject(item: Omit<ProjectItem, 'id' | 'createdAt'>): Proj
   };
 
   all.push(newProject);
-  fs.writeFileSync(PROJECTS_FILE, JSON.stringify(all, null, 2), 'utf-8');
+  fs.writeFileSync(getProjectsFile(), JSON.stringify(all, null, 2), 'utf-8');
   console.log(`[ProjectService] Created new project ${id}: "${newProject.title}"`);
   return newProject;
 }
@@ -169,7 +175,7 @@ export function updateProject(id: string, updates: Partial<ProjectItem>): Projec
     updatedAt: new Date().toISOString(),
   };
 
-  fs.writeFileSync(PROJECTS_FILE, JSON.stringify(all, null, 2), 'utf-8');
+  fs.writeFileSync(getProjectsFile(), JSON.stringify(all, null, 2), 'utf-8');
   console.log(`[ProjectService] Updated project ${id}`);
   return all[index];
 }
@@ -180,7 +186,7 @@ export function deleteProject(id: string): boolean {
   const filtered = all.filter((p) => p.id !== id);
   if (filtered.length === all.length) return false;
 
-  fs.writeFileSync(PROJECTS_FILE, JSON.stringify(filtered, null, 2), 'utf-8');
+  fs.writeFileSync(getProjectsFile(), JSON.stringify(filtered, null, 2), 'utf-8');
   console.log(`[ProjectService] Deleted project ${id}`);
   return true;
 }

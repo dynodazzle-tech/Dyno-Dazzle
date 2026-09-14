@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { insertEnquiryToSupabase, updateEnquiryEmailStatusInSupabase } from './supabaseService';
+import { getDataDir } from '../utils/dataDir';
 
 export interface StoredEnquiry {
   id: string;
@@ -26,17 +27,17 @@ export interface StoredEnquiry {
   }>;
 }
 
-const DATA_DIR = path.join(process.cwd(), 'data');
-const ENQUIRIES_FILE = path.join(DATA_DIR, 'enquiries.json');
+function getEnquiriesFile(): string {
+  const dir = getDataDir();
+  return path.join(dir, 'enquiries.json');
+}
 
 // Ensure data directory exists
 function ensureStorage() {
   try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-    if (!fs.existsSync(ENQUIRIES_FILE)) {
-      fs.writeFileSync(ENQUIRIES_FILE, JSON.stringify([], null, 2), 'utf-8');
+    const enquiriesFile = getEnquiriesFile();
+    if (!fs.existsSync(enquiriesFile)) {
+      fs.writeFileSync(enquiriesFile, JSON.stringify([], null, 2), 'utf-8');
     }
   } catch (err) {
     console.error('[Storage] Error ensuring storage directory:', err);
@@ -56,11 +57,12 @@ export async function saveEnquiry(enquiry: Omit<StoredEnquiry, 'id' | 'timestamp
 
   // 1. Local backup persistence
   try {
-    const raw = fs.readFileSync(ENQUIRIES_FILE, 'utf-8');
+    const enquiriesFile = getEnquiriesFile();
+    const raw = fs.readFileSync(enquiriesFile, 'utf-8');
     const list: StoredEnquiry[] = JSON.parse(raw || '[]');
     list.unshift(fullEnquiry);
     // Keep last 1000 enquiries in JSON file
-    fs.writeFileSync(ENQUIRIES_FILE, JSON.stringify(list.slice(0, 1000), null, 2), 'utf-8');
+    fs.writeFileSync(enquiriesFile, JSON.stringify(list.slice(0, 1000), null, 2), 'utf-8');
     console.log(`[Storage] Saved enquiry ${id} from ${fullEnquiry.name} (${fullEnquiry.email}) to local storage`);
   } catch (err) {
     console.error('[Storage] Failed to save enquiry to local file:', err);
@@ -93,12 +95,13 @@ export async function saveEnquiry(enquiry: Omit<StoredEnquiry, 'id' | 'timestamp
 export async function updateEnquiryEmailStatus(id: string, emailSent: boolean): Promise<void> {
   // Update local file
   try {
-    const raw = fs.readFileSync(ENQUIRIES_FILE, 'utf-8');
+    const enquiriesFile = getEnquiriesFile();
+    const raw = fs.readFileSync(enquiriesFile, 'utf-8');
     const list: StoredEnquiry[] = JSON.parse(raw || '[]');
     const item = list.find((e) => e.id === id);
     if (item) {
       item.emailSent = emailSent;
-      fs.writeFileSync(ENQUIRIES_FILE, JSON.stringify(list, null, 2), 'utf-8');
+      fs.writeFileSync(enquiriesFile, JSON.stringify(list, null, 2), 'utf-8');
     }
   } catch (err) {
     console.warn('[Storage] Could not update local email status:', err);
@@ -111,7 +114,8 @@ export async function updateEnquiryEmailStatus(id: string, emailSent: boolean): 
 export function getAllEnquiries(): StoredEnquiry[] {
   ensureStorage();
   try {
-    const raw = fs.readFileSync(ENQUIRIES_FILE, 'utf-8');
+    const enquiriesFile = getEnquiriesFile();
+    const raw = fs.readFileSync(enquiriesFile, 'utf-8');
     return JSON.parse(raw || '[]');
   } catch {
     return [];

@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { getDataDir } from '../utils/dataDir';
 
 export interface SiteSettings {
   companyName: string;
@@ -23,8 +24,10 @@ export interface SiteSettings {
   updatedAt?: string;
 }
 
-const DATA_DIR = path.join(process.cwd(), 'data');
-const SETTINGS_FILE = path.join(DATA_DIR, 'siteSettings.json');
+function getSettingsFile(): string {
+  const dir = getDataDir();
+  return path.join(dir, 'siteSettings.json');
+}
 
 const DEFAULT_SETTINGS: SiteSettings = {
   companyName: 'DynoDazzle',
@@ -48,18 +51,20 @@ const DEFAULT_SETTINGS: SiteSettings = {
 };
 
 function ensureStorage(): void {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
-  if (!fs.existsSync(SETTINGS_FILE)) {
-    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(DEFAULT_SETTINGS, null, 2), 'utf-8');
+  const settingsFile = getSettingsFile();
+  if (!fs.existsSync(settingsFile)) {
+    try {
+      fs.writeFileSync(settingsFile, JSON.stringify(DEFAULT_SETTINGS, null, 2), 'utf-8');
+    } catch (e) {
+      console.warn('[SettingsService] Failed to write default settings:', e);
+    }
   }
 }
 
 export function getSiteSettings(): SiteSettings {
   ensureStorage();
   try {
-    const raw = fs.readFileSync(SETTINGS_FILE, 'utf-8');
+    const raw = fs.readFileSync(getSettingsFile(), 'utf-8');
     return JSON.parse(raw || '{}');
   } catch (err) {
     console.error('[SettingsService] Error reading settings:', err);
@@ -75,7 +80,7 @@ export function updateSiteSettings(updates: Partial<SiteSettings>): SiteSettings
     ...updates,
     updatedAt: new Date().toISOString(),
   };
-  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(updated, null, 2), 'utf-8');
+  fs.writeFileSync(getSettingsFile(), JSON.stringify(updated, null, 2), 'utf-8');
   console.log('[SettingsService] Updated site settings');
   return updated;
 }

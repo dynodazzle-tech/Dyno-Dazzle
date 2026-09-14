@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ProjectItem } from '../types';
 import { Sparkles, ArrowRight, ExternalLink, Layers, CheckCircle2 } from 'lucide-react';
+import { apiFetch } from '../utils/api';
 
 interface ProjectsSectionProps {
   onSelectProjectForContact?: (category: string) => void;
@@ -12,11 +13,10 @@ export const ProjectsSection: React.FC<ProjectsSectionProps> = ({ onSelectProjec
   const [activeCategory, setActiveCategory] = useState<string>('All');
 
   useEffect(() => {
-    fetch('/api/projects')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success && Array.isArray(data.data)) {
-          setProjects(data.data);
+    apiFetch<{ success: boolean; data: ProjectItem[] }>('/api/projects')
+      .then((res) => {
+        if (res.ok && res.data?.success && Array.isArray(res.data.data)) {
+          setProjects(res.data.data);
         }
       })
       .catch((err) => console.error('Failed to load projects:', err))

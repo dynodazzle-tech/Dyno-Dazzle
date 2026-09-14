@@ -12,6 +12,7 @@ import {
 import { getSiteSettings, updateSiteSettings } from '../services/settingsService';
 import fs from 'fs';
 import path from 'path';
+import { getDataDir } from '../utils/dataDir';
 
 const router = express.Router();
 
@@ -39,8 +40,10 @@ interface AdminSession {
   expiresAt: number;
 }
 
-const DATA_DIR = path.join(process.cwd(), 'data');
-const AUTH_STORE_FILE = path.join(DATA_DIR, 'admin_auth.json');
+function getAuthStoreFile(): string {
+  const dir = getDataDir();
+  return path.join(dir, 'admin_auth.json');
+}
 
 // Ensure data folder and load persisted auth state if available
 function loadPersistedAuthState(): {
@@ -51,11 +54,9 @@ function loadPersistedAuthState(): {
   const sessionMap = new Map<string, AdminSession>();
 
   try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-    if (fs.existsSync(AUTH_STORE_FILE)) {
-      const raw = fs.readFileSync(AUTH_STORE_FILE, 'utf-8');
+    const authStoreFile = getAuthStoreFile();
+    if (fs.existsSync(authStoreFile)) {
+      const raw = fs.readFileSync(authStoreFile, 'utf-8');
       const data = JSON.parse(raw);
       if (data.pendingOtps) {
         Object.entries(data.pendingOtps).forEach(([k, v]: [string, any]) => {
@@ -90,7 +91,7 @@ function persistAuthState(): void {
     });
 
     fs.writeFileSync(
-      AUTH_STORE_FILE,
+      getAuthStoreFile(),
       JSON.stringify({ pendingOtps: pendingObj, activeSessions: sessionObj }, null, 2),
       'utf-8'
     );
