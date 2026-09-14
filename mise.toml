@@ -1,0 +1,4 @@
+# mise.toml configuration for Netlify build environment
+[tools]
+bun = "latest"
+node = "22"

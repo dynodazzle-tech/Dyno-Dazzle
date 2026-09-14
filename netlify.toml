@@ -2,14 +2,10 @@
   command = "npm run build"
   publish = "dist"
 
-[functions]
-  directory = "netlify/functions"
-  node_bundler = "esbuild"
-
-# Route all API requests to the Netlify serverless function
+# Proxy all /api/* requests to the live backend server
 [[redirects]]
   from = "/api/*"
-  to = "/.netlify/functions/api/:splat"
+  to = "https://ais-pre-rutbzyhwvqb3tney7cshne-16516054101.asia-east1.run.app/api/:splat"
   status = 200
   force = true
 
