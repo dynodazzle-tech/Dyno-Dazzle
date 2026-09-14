@@ -1,0 +1,6 @@
+{
+  "name": "DynoDazzle",
+  "description": "Technology, digital marketing, website development, app development, AI solutions, automation and technical support by DynoDazzle.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
