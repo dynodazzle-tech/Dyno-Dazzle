@@ -32,6 +32,7 @@ import {
   Globe,
   Server,
   Wifi,
+  Key,
 } from 'lucide-react';
 import { ProjectItem, EnquiryItem, SiteSettings } from '../../types';
 import {
@@ -51,8 +52,8 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
   // Auth state
   const [authToken, setAuthToken] = useState<string | null>(() => localStorage.getItem('dyno_admin_token'));
   const [authStep, setAuthStep] = useState<'login' | 'otp'>('login');
-  const [emailInput, setEmailInput] = useState('dynodazzle@gmail.com');
-  const [passwordInput, setPasswordInput] = useState('Vicky@12345');
+  const [emailInput, setEmailInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [otpInput, setOtpInput] = useState(['', '', '', '', '', '']);
   const [authLoading, setAuthLoading] = useState(false);
@@ -89,6 +90,39 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsStatusMsg, setSettingsStatusMsg] = useState<string | null>(null);
 
+  // OTP Fallback and Email Status states
+  const [devOtpCode, setDevOtpCode] = useState<string | null>(null);
+  const [emailStatus, setEmailStatus] = useState<{
+    account?: string;
+    configured?: boolean;
+    mode?: string;
+    maskedPassword?: string;
+    notificationEmail?: string;
+    updatedAt?: string;
+  } | null>(null);
+  const [emailTesting, setEmailTesting] = useState(false);
+  const [emailTestResult, setEmailTestResult] = useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
+
+  // Email settings inputs in dashboard Settings
+  const [emailAppPasswordInput, setEmailAppPasswordInput] = useState('');
+  const [emailUserInput, setEmailUserInput] = useState('');
+  const [notificationEmailInput, setNotificationEmailInput] = useState('');
+  const [emailConfigSaving, setEmailConfigSaving] = useState(false);
+  const [emailConfigMessage, setEmailConfigMessage] = useState<{ success: boolean; text: string } | null>(null);
+  const [showAppPassword, setShowAppPassword] = useState(false);
+
+  // In-app custom confirmation modal state for reliable delete operations across all environments (including iframes)
+  const [itemToDelete, setItemToDelete] = useState<{
+    type: 'enquiry' | 'project';
+    id: string;
+    title: string;
+  } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [projectSaveError, setProjectSaveError] = useState<string | null>(null);
+
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   // Timer for resend cooldown
@@ -103,6 +137,18 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
   useEffect(() => {
     if (isOpen && authToken) {
       verifyToken(authToken);
+    }
+  }, [isOpen, authToken]);
+
+  // Reset form and purge sensitive inputs when modal is closed
+  useEffect(() => {
+    if (!isOpen && !authToken) {
+      setEmailInput('');
+      setPasswordInput('');
+      setOtpInput(['', '', '', '', '', '']);
+      setAuthStep('login');
+      setAuthError(null);
+      setAuthNotice(null);
     }
   }, [isOpen, authToken]);
 
@@ -174,11 +220,121 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
       } else if (activeTab === 'settings') {
         const res = await apiFetch('/api/admin/settings', { headers });
         if (res.ok && res.data?.success) setSettings(res.data.data || null);
+        checkEmailStatus();
       }
     } catch (err) {
       console.error('Error loading admin data:', err);
     } finally {
       setDataLoading(false);
+    }
+  };
+
+  const checkEmailStatus = async () => {
+    if (!authToken) return;
+    try {
+      const res = await apiFetch('/api/admin/email/status', {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      if (res.ok && res.data?.success && res.data.data) {
+        setEmailStatus(res.data.data);
+        if (!emailUserInput && res.data.data.account) {
+          setEmailUserInput(res.data.data.account);
+        }
+        if (!notificationEmailInput && res.data.data.notificationEmail) {
+          setNotificationEmailInput(res.data.data.notificationEmail);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleSaveEmailConfig = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!authToken) return;
+    setEmailConfigSaving(true);
+    setEmailConfigMessage(null);
+    setEmailTestResult(null);
+
+    try {
+      const payload: {
+        gmailAppPassword?: string;
+        gmailUser?: string;
+        notificationEmail?: string;
+      } = {};
+
+      if (emailAppPasswordInput.trim()) {
+        payload.gmailAppPassword = emailAppPasswordInput.trim();
+      }
+      if (emailUserInput.trim()) {
+        payload.gmailUser = emailUserInput.trim();
+      }
+      if (notificationEmailInput.trim()) {
+        payload.notificationEmail = notificationEmailInput.trim();
+      }
+
+      const res = await apiFetch('/api/admin/email/config', {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok && res.data?.success) {
+        setEmailConfigMessage({
+          success: true,
+          text: res.data.message || 'Gmail credentials saved and verified successfully!',
+        });
+        if (res.data.status) {
+          setEmailStatus(res.data.status);
+        }
+        if (res.data.testResult) {
+          setEmailTestResult({
+            success: Boolean(res.data.testResult.success),
+            message: res.data.testResult.message,
+          });
+        }
+        setEmailAppPasswordInput(''); // Clear typed password for security
+      } else {
+        setEmailConfigMessage({
+          success: false,
+          text: res.data?.message || 'Failed to save email credentials.',
+        });
+      }
+    } catch {
+      setEmailConfigMessage({
+        success: false,
+        text: 'Network error saving email configuration.',
+      });
+    } finally {
+      setEmailConfigSaving(false);
+    }
+  };
+
+  const handleTestEmail = async () => {
+    if (!authToken) return;
+    setEmailTesting(true);
+    setEmailTestResult(null);
+    try {
+      const res = await apiFetch('/api/admin/email/test', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      if (res.data) {
+        setEmailTestResult({
+          success: Boolean(res.data.success),
+          message: res.data.message || (res.data.success ? 'Email test succeeded!' : 'Email test failed.'),
+        });
+      }
+    } catch {
+      setEmailTestResult({
+        success: false,
+        message: 'Could not connect to email verification service.',
+      });
+    } finally {
+      setEmailTesting(false);
     }
   };
 
@@ -204,6 +360,12 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
 
       // Move to OTP step
       setAuthStep('otp');
+      setPasswordInput(''); // Purge password from memory immediately
+      if (res.data.devOtp) {
+        setDevOtpCode(res.data.devOtp);
+      } else {
+        setDevOtpCode(null);
+      }
       setAuthNotice(res.data.message || 'A 6-digit OTP has been sent to your Gmail.');
       setResendCooldown(60);
       setOtpInput(['', '', '', '', '', '']);
@@ -241,9 +403,13 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
         return;
       }
 
-      // Success! Save token
+      // Success! Save token and purge sensitive input fields
       localStorage.setItem('dyno_admin_token', res.data.token);
       setAuthToken(res.data.token);
+      setEmailInput('');
+      setPasswordInput('');
+      setOtpInput(['', '', '', '', '', '']);
+      setDevOtpCode(null);
       setAuthError(null);
       setAuthNotice(null);
     } catch {
@@ -336,6 +502,9 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
       });
       if (res.ok && res.data?.success) {
         setAuthNotice(res.data.message || 'A fresh 6-digit verification code has been dispatched to your Gmail.');
+        if (res.data.devOtp) {
+          setDevOtpCode(res.data.devOtp);
+        }
         setResendCooldown(60);
         setOtpInput(['', '', '', '', '', '']);
         setTimeout(() => {
@@ -361,6 +530,14 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
     localStorage.removeItem('dyno_admin_token');
     setAuthToken(null);
     setAuthStep('login');
+    setEmailInput('');
+    setPasswordInput('');
+    setOtpInput(['', '', '', '', '', '']);
+    setDevOtpCode(null);
+    setEmailStatus(null);
+    setEmailTestResult(null);
+    setAuthError(null);
+    setAuthNotice(null);
   };
 
   // ENQUIRIES ACTIONS
@@ -385,8 +562,17 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
     }
   };
 
-  const handleDeleteEnquiry = async (enquiryId: string) => {
-    if (!authToken || !window.confirm('Are you sure you want to delete this enquiry record?')) return;
+  const requestDeleteEnquiry = (enquiry: EnquiryItem) => {
+    setItemToDelete({
+      type: 'enquiry',
+      id: enquiry.id,
+      title: `${enquiry.name} (${enquiry.service})`,
+    });
+  };
+
+  const executeDeleteEnquiry = async (enquiryId: string) => {
+    if (!authToken) return;
+    setIsDeleting(true);
     try {
       const res = await apiFetch(`/api/admin/enquiries/${enquiryId}`, {
         method: 'DELETE',
@@ -394,9 +580,21 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
       });
       if (res.ok) {
         setEnquiries((prev) => prev.filter((e) => e.id !== enquiryId));
+        setItemToDelete(null);
       }
     } catch (err) {
       console.error('Failed to delete enquiry:', err);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleDeleteEnquiry = async (enquiryId: string) => {
+    const found = enquiries.find((e) => e.id === enquiryId);
+    if (found) {
+      requestDeleteEnquiry(found);
+    } else {
+      executeDeleteEnquiry(enquiryId);
     }
   };
 
@@ -452,6 +650,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
 
   // PROJECT ACTIONS
   const openAddProject = () => {
+    setProjectSaveError(null);
     setEditingProject({
       title: '',
       category: 'AI Solutions & Automation',
@@ -473,6 +672,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
   };
 
   const openEditProject = (p: ProjectItem) => {
+    setProjectSaveError(null);
     setEditingProject({ ...p });
     setNewTagInput('');
     setNewFeatureInput('');
@@ -484,6 +684,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
     if (!editingProject || !authToken) return;
 
     setProjectSaving(true);
+    setProjectSaveError(null);
     try {
       const isNew = !editingProject.id;
       const url = isNew ? '/api/admin/projects' : `/api/admin/projects/${editingProject.id}`;
@@ -503,18 +704,27 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
         setEditingProject(null);
         loadDashboardData();
       } else {
-        alert(res.data?.message || 'Failed to save project');
+        setProjectSaveError(res.data?.message || 'Failed to save project. Please check fields.');
       }
     } catch (err) {
       console.error('Failed to save project:', err);
-      alert('Error saving project');
+      setProjectSaveError('Network error or server issue saving project.');
     } finally {
       setProjectSaving(false);
     }
   };
 
-  const handleDeleteProject = async (projectId: string) => {
-    if (!authToken || !window.confirm('Delete this project from portfolio?')) return;
+  const requestDeleteProject = (project: ProjectItem) => {
+    setItemToDelete({
+      type: 'project',
+      id: project.id,
+      title: project.title,
+    });
+  };
+
+  const executeDeleteProject = async (projectId: string) => {
+    if (!authToken) return;
+    setIsDeleting(true);
     try {
       const res = await apiFetch(`/api/admin/projects/${projectId}`, {
         method: 'DELETE',
@@ -522,9 +732,21 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
       });
       if (res.ok) {
         setProjects((prev) => prev.filter((p) => p.id !== projectId));
+        setItemToDelete(null);
       }
     } catch (err) {
       console.error('Failed to delete project:', err);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleDeleteProject = async (projectId: string) => {
+    const found = projects.find((p) => p.id === projectId);
+    if (found) {
+      requestDeleteProject(found);
+    } else {
+      executeDeleteProject(projectId);
     }
   };
 
@@ -713,9 +935,10 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
                         <input
                           type="email"
                           required
+                          autoComplete="username"
                           value={emailInput}
                           onChange={(e) => setEmailInput(e.target.value)}
-                          placeholder="dynodazzle@gmail.com"
+                          placeholder="Enter administrator email"
                           className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-900/90 border border-slate-700/80 text-white text-sm focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none transition-colors"
                         />
                       </div>
@@ -730,9 +953,10 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
                         <input
                           type={showPassword ? 'text' : 'password'}
                           required
+                          autoComplete="current-password"
                           value={passwordInput}
                           onChange={(e) => setPasswordInput(e.target.value)}
-                          placeholder="••••••••••••"
+                          placeholder="Enter administrator password"
                           className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-slate-900/90 border border-slate-700/80 text-white text-sm focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none transition-colors font-mono"
                         />
                         <button
@@ -765,7 +989,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
                   </button>
 
                   <div className="p-3 rounded-xl bg-cyan-950/30 border border-cyan-500/20 text-[11px] text-cyan-300 text-center leading-relaxed">
-                    🔒 Protected 2-Step Admin verification. Code dispatched directly via DynoDazzle Gmail to <strong className="text-white">dynodazzle@gmail.com</strong>.
+                    🔒 Protected 2-Step Admin verification. A 6-digit one-time code will be dispatched to the authorized administrator's inbox upon password verification.
                   </div>
 
                   {/* Backend connection pill / selector */}
@@ -838,6 +1062,35 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
                     <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center gap-2">
                       <AlertCircle className="w-4 h-4 shrink-0" />
                       <span>{authError}</span>
+                    </div>
+                  )}
+
+                  {/* Fallback verification code banner if email delivery is pending or failed */}
+                  {devOtpCode && (
+                    <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-amber-300 font-semibold">
+                          <Key className="w-4 h-4 text-amber-400 shrink-0" />
+                          <span>Admin Code:</span>
+                          <span className="font-mono text-base font-bold text-white tracking-widest bg-slate-950 px-2.5 py-0.5 rounded-lg border border-amber-500/40">
+                            {devOtpCode}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const digits = devOtpCode.split('').slice(0, 6);
+                            setOtpInput(digits);
+                            submitOtpCode(devOtpCode);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 text-xs font-semibold transition-colors cursor-pointer"
+                        >
+                          Auto-fill &amp; Enter
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-amber-400/80 leading-relaxed">
+                        Gmail delivery pending or SMTP returned 535 Bad Credentials. You can log in using this code, and update your Google App Password in Settings.
+                      </p>
                     </div>
                   )}
 
@@ -1207,8 +1460,9 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
                             <button
                               type="button"
                               onClick={() => handleDeleteEnquiry(enquiry.id)}
-                              className="p-1.5 text-slate-500 hover:text-rose-400 transition-colors"
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 active:scale-95 transition-all"
                               title="Delete enquiry record"
+                              aria-label={`Delete enquiry from ${enquiry.name}`}
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -1331,8 +1585,9 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
                               <button
                                 type="button"
                                 onClick={() => handleDeleteProject(project.id)}
-                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors"
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 active:scale-95 transition-all"
                                 title="Delete Project"
+                                aria-label={`Delete project ${project.title}`}
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
@@ -1457,6 +1712,206 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
                             }
                             className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-xs text-white focus:border-cyan-500 outline-none resize-none"
                           />
+                        </div>
+                      </div>
+
+                      {/* Email & SMTP Settings & Diagnostics Card */}
+                      <div className="p-5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-4">
+                        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                          <div className="flex items-center gap-2">
+                            <Mail className="w-4 h-4 text-cyan-400" />
+                            <div>
+                              <h4 className="text-sm font-bold text-white">Gmail SMTP &amp; Lead Dispatch Service</h4>
+                              <p className="text-[11px] text-slate-400">Configure your Google App Password to enable instant lead alerts &amp; client confirmations</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={handleTestEmail}
+                              disabled={emailTesting || emailConfigSaving}
+                              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                              title="Verify current credentials with Google SMTP"
+                            >
+                              <RefreshCw className={`w-3.5 h-3.5 ${emailTesting ? 'animate-spin' : ''}`} />
+                              <span>{emailTesting ? 'Testing...' : 'Test Connection'}</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Status Indicators Grid */}
+                        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+                          <div className="p-3 rounded-lg bg-slate-950/80 border border-slate-800">
+                            <span className="text-slate-400 block mb-0.5">Sender Account</span>
+                            <span className="font-semibold text-white truncate block">
+                              {emailStatus?.account || 'dynodazzle@gmail.com'}
+                            </span>
+                          </div>
+
+                          <div className="p-3 rounded-lg bg-slate-950/80 border border-slate-800">
+                            <span className="text-slate-400 block mb-0.5">Status</span>
+                            <span className={`font-semibold flex items-center gap-1.5 ${emailStatus?.configured ? 'text-emerald-400' : 'text-amber-400'}`}>
+                              <span className={`w-2 h-2 rounded-full ${emailStatus?.configured ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                              {emailStatus?.configured ? 'Connected & Verified' : 'Needs App Password'}
+                            </span>
+                          </div>
+
+                          <div className="p-3 rounded-lg bg-slate-950/80 border border-slate-800">
+                            <span className="text-slate-400 block mb-0.5">Active App Password</span>
+                            <span className="font-mono text-cyan-400 block truncate font-semibold">
+                              {emailStatus?.maskedPassword || 'None set'}
+                            </span>
+                          </div>
+
+                          <div className="p-3 rounded-lg bg-slate-950/80 border border-slate-800">
+                            <span className="text-slate-400 block mb-0.5">Lead Alert Inbox</span>
+                            <span className="font-semibold text-slate-300 truncate block">
+                              {emailStatus?.notificationEmail || 'dynodazzle@gmail.com'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Direct Option to Set / Update Gmail App Password in Dashboard */}
+                        <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800/90 space-y-3">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Key className="w-4 h-4 text-cyan-400" />
+                            <span className="text-xs font-bold text-white uppercase tracking-wider">Set / Update Gmail Credentials</span>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {/* App Password Input */}
+                            <div className="sm:col-span-2">
+                              <label className="block text-xs font-semibold text-slate-300 mb-1">
+                                Google App Password <span className="text-cyan-400">(16 Characters)</span>
+                              </label>
+                              <div className="relative">
+                                <input
+                                  type={showAppPassword ? 'text' : 'password'}
+                                  value={emailAppPasswordInput}
+                                  onChange={(e) => setEmailAppPasswordInput(e.target.value)}
+                                  placeholder="e.g. arev zoxp rodc lday"
+                                  className="w-full pl-3 pr-10 py-2 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white font-mono placeholder:text-slate-600 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setShowAppPassword((prev) => !prev)}
+                                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                                  title={showAppPassword ? 'Hide password' : 'Show password'}
+                                >
+                                  {showAppPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                </button>
+                              </div>
+                              <p className="text-[11px] text-slate-500 mt-1">
+                                Spaces are stripped automatically. Create this at <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">myaccount.google.com/apppasswords</a>.
+                              </p>
+                            </div>
+
+                            {/* Sender Email */}
+                            <div>
+                              <label className="block text-xs font-semibold text-slate-300 mb-1">
+                                Sender Gmail Address
+                              </label>
+                              <input
+                                type="email"
+                                value={emailUserInput}
+                                onChange={(e) => setEmailUserInput(e.target.value)}
+                                placeholder="dynodazzle@gmail.com"
+                                className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white placeholder:text-slate-600 focus:border-cyan-500 outline-none"
+                              />
+                            </div>
+
+                            {/* Admin Notification Email */}
+                            <div>
+                              <label className="block text-xs font-semibold text-slate-300 mb-1">
+                                Lead Alert Recipient Email
+                              </label>
+                              <input
+                                type="email"
+                                value={notificationEmailInput}
+                                onChange={(e) => setNotificationEmailInput(e.target.value)}
+                                placeholder="dynodazzle@gmail.com"
+                                className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white placeholder:text-slate-600 focus:border-cyan-500 outline-none"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800/80">
+                            <span className="text-[11px] text-slate-400">
+                              Saves credentials securely to server configuration and verifies connection with Google SMTP.
+                            </span>
+                            <button
+                              type="button"
+                              onClick={handleSaveEmailConfig}
+                              disabled={emailConfigSaving}
+                              className="px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold text-xs shadow-md shadow-cyan-500/20 flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                            >
+                              {emailConfigSaving ? (
+                                <>
+                                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                  <span>Verifying &amp; Saving...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Check className="w-3.5 h-3.5" />
+                                  <span>Save &amp; Verify Gmail Password</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Feedback Notices */}
+                        {emailConfigMessage && (
+                          <div
+                            className={`p-3 rounded-xl text-xs flex items-start gap-2 border ${
+                              emailConfigMessage.success
+                                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                                : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+                            }`}
+                          >
+                            {emailConfigMessage.success ? (
+                              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400 mt-0.5" />
+                            ) : (
+                              <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
+                            )}
+                            <div className="space-y-1">
+                              <p className="font-semibold">{emailConfigMessage.success ? 'Configuration Saved' : 'Save Error'}</p>
+                              <p className="leading-relaxed">{emailConfigMessage.text}</p>
+                            </div>
+                          </div>
+                        )}
+
+                        {emailTestResult && !emailConfigMessage && (
+                          <div
+                            className={`p-3 rounded-xl text-xs flex items-start gap-2 border ${
+                              emailTestResult.success
+                                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                                : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                            }`}
+                          >
+                            {emailTestResult.success ? (
+                              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400 mt-0.5" />
+                            ) : (
+                              <AlertCircle className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
+                            )}
+                            <div className="space-y-1">
+                              <p className="font-semibold">{emailTestResult.success ? 'Google SMTP Verified' : 'SMTP Notice'}</p>
+                              <p className="leading-relaxed">{emailTestResult.message}</p>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 text-[11px] text-slate-400 space-y-1.5 leading-relaxed">
+                          <p className="font-semibold text-slate-300 flex items-center gap-1.5">
+                            <Key className="w-3.5 h-3.5 text-cyan-400" />
+                            How to set up Google App Password for Gmail SMTP:
+                          </p>
+                          <ol className="list-decimal pl-4 space-y-1 text-slate-400">
+                            <li>Ensure <strong>2-Step Verification</strong> is enabled on <code>dynodazzle@gmail.com</code>.</li>
+                            <li>Go to <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener noreferrer" className="text-cyan-400 underline">https://myaccount.google.com/apppasswords</a>.</li>
+                            <li>Generate a new 16-character App Password (e.g. for "DynoDazzle Lead Service").</li>
+                            <li>Enter the 16 characters in the field above and click <strong>Save &amp; Verify Gmail Password</strong>.</li>
+                          </ol>
                         </div>
                       </div>
 
@@ -1612,6 +2067,13 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
               </div>
 
               <form onSubmit={handleSaveProject} className="space-y-4 text-xs">
+                {projectSaveError && (
+                  <div className="p-3 rounded-lg bg-rose-950/40 border border-rose-500/40 text-rose-300 flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0 text-rose-400" />
+                    <span>{projectSaveError}</span>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block font-semibold text-slate-300 mb-1">Project Title *</label>
@@ -1801,6 +2263,73 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* =========================================================================
+            DELETE CONFIRMATION MODAL (Reliable across all environments & iframes)
+           ========================================================================= */}
+        {itemToDelete && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fade-in">
+            <div className="w-full max-w-md bg-[#0c1326] border border-rose-500/40 rounded-2xl shadow-2xl p-6 text-slate-100 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400 flex-shrink-0">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">
+                    Confirm Permanent Deletion
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    This operation will immediately remove the record from DynoDazzle.
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 text-xs text-slate-300">
+                <span className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold block mb-1">
+                  Target {itemToDelete.type === 'enquiry' ? 'Enquiry' : 'Project'}
+                </span>
+                <p className="text-sm font-medium text-white break-words">
+                  {itemToDelete.title}
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={() => setItemToDelete(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800 transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={() => {
+                    if (itemToDelete.type === 'enquiry') {
+                      executeDeleteEnquiry(itemToDelete.id);
+                    } else {
+                      executeDeleteProject(itemToDelete.id);
+                    }
+                  }}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-rose-500 hover:bg-rose-600 text-white transition-all shadow-lg shadow-rose-500/20 flex items-center gap-2 disabled:opacity-50"
+                >
+                  {isDeleting ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Deleting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Delete Record</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         )}

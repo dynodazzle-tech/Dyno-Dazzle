@@ -10,6 +10,7 @@ import {
   ArrowRight,
 } from './Icon';
 import { Lock } from 'lucide-react';
+import { DynoDazzleLogo } from './DynoDazzleLogo';
 
 interface FooterProps {
   onOpenPrivacy: () => void;
@@ -25,18 +26,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenPrivacy, onOpenTerms, onNa
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 pb-12 border-b border-slate-900">
           {/* Column 1: Brand Info (2 cols on lg) */}
           <div className="lg:col-span-2 space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-500 via-blue-600 to-indigo-600 p-[1.5px] flex items-center justify-center">
-                <div className="w-full h-full bg-[#070b14] rounded-[9px] flex items-center justify-center">
-                  <span className="font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400 text-lg">
-                    D
-                  </span>
-                </div>
-              </div>
-              <span className="text-xl font-bold text-white tracking-tight">
-                {SITE_CONFIG.companyName}
-              </span>
-            </div>
+            <DynoDazzleLogo size="md" />
 
             <p className="text-xs text-cyan-400 font-mono uppercase tracking-widest">
               Technology. Digital. Innovation.
@@ -188,10 +178,18 @@ export const Footer: React.FC<FooterProps> = ({ onOpenPrivacy, onOpenTerms, onNa
               </li>
               <li>
                 <button
-                  onClick={() => onNavigate('#process')}
+                  onClick={() => onNavigate('#solutions')}
                   className="hover:text-cyan-400 transition-colors"
                 >
-                  Our Process
+                  Our Solutions
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={() => onNavigate('#projects')}
+                  className="hover:text-cyan-400 transition-colors"
+                >
+                  Featured Projects
                 </button>
               </li>
               <li>

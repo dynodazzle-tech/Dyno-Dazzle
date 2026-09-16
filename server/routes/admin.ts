@@ -1,7 +1,14 @@
 import express, { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import { getAllEnquiries } from '../services/storageService';
-import { sendAdminOtpEmail, sendAdminReplyEmail } from '../services/emailService';
+import {
+  sendAdminOtpEmail,
+  sendAdminReplyEmail,
+  testEmailConnection,
+  getEmailCredentials,
+  getEmailConfigStatus,
+  updateEmailCredentials,
+} from '../services/emailService';
 import {
   getAllProjects,
   getProjectById,
@@ -183,15 +190,32 @@ router.post('/auth/login', async (req: Request, res: Response): Promise<void> =>
   console.log(`[AdminAuth] Generated OTP for ${cleanEmail}. Dispatching verification email...`);
 
   // Send OTP to dynodazzle@gmail.com
-  const emailDispatched = await sendAdminOtpEmail(cleanEmail, otpCode);
+  const emailResult = await sendAdminOtpEmail(cleanEmail, otpCode);
+  const emailDispatched = emailResult.success;
+
+  console.log(
+    `[AdminAuth] Admin OTP code for ${cleanEmail}: ${otpCode} (Email dispatched: ${emailDispatched}${
+      !emailDispatched ? `, reason: ${emailResult.reason}` : ''
+    })`
+  );
+
+  let noticeMessage = `A 6-digit verification code has been dispatched to ${cleanEmail}. Please check your inbox or spam.`;
+  if (!emailDispatched) {
+    if (emailResult.reason === 'invalid_credentials') {
+      noticeMessage = `Gmail rejected credentials (535). Use one-time code ${otpCode} below to sign in.`;
+    } else if (emailResult.reason === 'not_configured') {
+      noticeMessage = `Gmail delivery not configured. Use one-time code ${otpCode} below to sign in.`;
+    } else {
+      noticeMessage = `Email delivery unavailable. Use one-time code ${otpCode} below to sign in.`;
+    }
+  }
 
   res.json({
     success: true,
     step: 'otp_required',
-    message: emailDispatched
-      ? `A 6-digit verification code has been dispatched to ${cleanEmail}. Please check your inbox or spam.`
-      : `Verification code generated for ${cleanEmail}. Please enter the 6-digit code.`,
+    message: noticeMessage,
     emailSent: emailDispatched,
+    ...(!emailDispatched ? { devOtp: otpCode, emailReason: emailResult.reason } : {}),
     expiresInSeconds: 900,
     cooldownSeconds: 60,
   });
@@ -350,12 +374,23 @@ router.post('/auth/resend-otp', async (req: Request, res: Response): Promise<voi
   persistAuthState();
 
   console.log(`[AdminAuth] Resending fresh OTP to ${cleanEmail}...`);
-  const emailDispatched = await sendAdminOtpEmail(cleanEmail, otpCode);
+  const emailResult = await sendAdminOtpEmail(cleanEmail, otpCode);
+  const emailDispatched = emailResult.success;
+
+  console.log(
+    `[AdminAuth] Fresh verification code for ${cleanEmail}: ${otpCode} (Email dispatched: ${emailDispatched})`
+  );
+
+  let resendMessage = `A fresh 6-digit verification code has been dispatched to ${cleanEmail}.`;
+  if (!emailDispatched) {
+    resendMessage = `Fresh verification code: ${otpCode} (Email delivery unavailable).`;
+  }
 
   res.json({
     success: true,
-    message: `A fresh 6-digit verification code has been dispatched to ${cleanEmail}.`,
+    message: resendMessage,
     emailSent: emailDispatched,
+    ...(!emailDispatched ? { devOtp: otpCode, emailReason: emailResult.reason } : {}),
     cooldownSeconds: 60,
   });
 });
@@ -414,7 +449,7 @@ router.patch('/enquiries/:id', requireAdminAuth, (req: Request, res: Response): 
   const { status, notes } = req.body;
 
   try {
-    const filePath = path.join(process.cwd(), 'data', 'enquiries.json');
+    const filePath = path.join(getDataDir(), 'enquiries.json');
     if (!fs.existsSync(filePath)) {
       res.status(404).json({ success: false, message: 'Enquiries record not found' });
       return;
@@ -457,7 +492,7 @@ router.post('/enquiries/:id/reply', requireAdminAuth, async (req: Request, res: 
   }
 
   try {
-    const filePath = path.join(process.cwd(), 'data', 'enquiries.json');
+    const filePath = path.join(getDataDir(), 'enquiries.json');
     const list = fs.existsSync(filePath) ? JSON.parse(fs.readFileSync(filePath, 'utf-8') || '[]') : [];
     const enquiry = list.find((e: any) => e.id === id);
 
@@ -514,7 +549,7 @@ router.delete('/enquiries/:id', requireAdminAuth, (req: Request, res: Response):
   const { id } = req.params;
 
   try {
-    const filePath = path.join(process.cwd(), 'data', 'enquiries.json');
+    const filePath = path.join(getDataDir(), 'enquiries.json');
     if (!fs.existsSync(filePath)) {
       res.status(404).json({ success: false, message: 'No enquiries file' });
       return;
@@ -633,6 +668,43 @@ router.put('/settings', requireAdminAuth, (req: Request, res: Response): void =>
     message: 'Site settings updated successfully',
     data: updated,
   });
+});
+
+/* =========================================================================
+   EMAIL SERVICE STATUS & DIAGNOSTICS
+   ========================================================================= */
+
+router.get('/email/status', requireAdminAuth, (_req: Request, res: Response): void => {
+  const status = getEmailConfigStatus();
+  res.json({
+    success: true,
+    data: status,
+  });
+});
+
+router.put('/email/config', requireAdminAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { gmailAppPassword, gmailUser, notificationEmail } = req.body || {};
+    const result = await updateEmailCredentials({
+      gmailAppPassword,
+      gmailUser,
+      notificationEmail,
+    });
+    res.json(result);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ success: false, message });
+  }
+});
+
+router.post('/email/test', requireAdminAuth, async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const testResult = await testEmailConnection();
+    res.json(testResult);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ success: false, configured: false, message });
+  }
 });
 
 /* =========================================================================

@@ -1,4 +1,7 @@
 import nodemailer, { Transporter } from 'nodemailer';
+import fs from 'fs';
+import path from 'path';
+import { getDataDir } from '../utils/dataDir';
 
 interface SendEnquiryEmailsParams {
   name: string;
@@ -17,46 +20,250 @@ interface EmailResult {
   message: string;
 }
 
-export async function sendEnquiryEmails(params: SendEnquiryEmailsParams): Promise<EmailResult> {
-  const { name, email, phone, company, service, budget, message, enquiryId } = params;
+export interface EmailCredentials {
+  gmailUser: string;
+  gmailPass: string | null;
+  smtpHost?: string;
+  smtpPort: number;
+  smtpUser?: string;
+  smtpPass?: string;
+  smtpSecure: boolean;
+  isConfigured: boolean;
+  mode: 'gmail' | 'smtp' | 'none';
+}
 
-  // Gmail Configuration
-  const gmailUser = (process.env.GMAIL_USER || (process.env.SMTP_USER && process.env.SMTP_USER.includes('@gmail.com') ? process.env.SMTP_USER : undefined))?.trim();
-  const rawGmailPass = process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASSWORD;
-  const gmailPass = rawGmailPass ? rawGmailPass.replace(/\s+/g, '') : undefined;
+export interface StoredEmailConfig {
+  gmailUser?: string;
+  gmailAppPassword?: string;
+  notificationEmail?: string;
+  updatedAt?: string;
+}
 
-  // General SMTP Configuration fallback
-  const smtpHost = process.env.SMTP_HOST;
+function getEmailConfigFile(): string {
+  return path.join(getDataDir(), 'emailConfig.json');
+}
+
+export function getStoredEmailConfig(): StoredEmailConfig {
+  try {
+    const file = getEmailConfigFile();
+    if (fs.existsSync(file)) {
+      const data = fs.readFileSync(file, 'utf-8');
+      return JSON.parse(data || '{}');
+    }
+  } catch (err) {
+    console.warn('[EmailService] Failed to read emailConfig.json:', err);
+  }
+  return {};
+}
+
+export function saveStoredEmailConfig(config: StoredEmailConfig): void {
+  try {
+    const file = getEmailConfigFile();
+    fs.writeFileSync(file, JSON.stringify(config, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('[EmailService] Failed to write emailConfig.json:', err);
+  }
+}
+
+/**
+ * Validates and retrieves configured email credentials.
+ * Strips out expired/invalid placeholders like 'jshs kpmh yfrh sbbn'.
+ */
+export function getEmailCredentials(): EmailCredentials {
+  const stored = getStoredEmailConfig();
+
+  const gmailUser = (
+    stored.gmailUser ||
+    process.env.GMAIL_USER ||
+    (process.env.SMTP_USER && process.env.SMTP_USER.includes('@gmail.com') ? process.env.SMTP_USER : undefined) ||
+    'dynodazzle@gmail.com'
+  ).trim();
+
+  let rawGmailPass = (
+    stored.gmailAppPassword ||
+    process.env.GMAIL_APP_PASSWORD ||
+    process.env.SMTP_PASSWORD ||
+    ''
+  ).trim();
+
+  // Strip optional quotes
+  if (rawGmailPass.startsWith('"') && rawGmailPass.endsWith('"')) {
+    rawGmailPass = rawGmailPass.slice(1, -1).trim();
+  }
+  const cleanPass = rawGmailPass.replace(/\s+/g, '');
+
+  // Reject revoked/invalid legacy placeholder
+  const isKnownRevokedPlaceholder = cleanPass.toLowerCase() === 'jshskpmhyfrhsbbn';
+  const hasValidGmailPass = cleanPass.length >= 8 && !isKnownRevokedPlaceholder;
+
+  const smtpHost = process.env.SMTP_HOST?.trim();
   const smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
-  const smtpUser = process.env.SMTP_USER;
-  const smtpPass = process.env.SMTP_PASSWORD;
+  const smtpUser = process.env.SMTP_USER?.trim();
+  const smtpPass = process.env.SMTP_PASSWORD?.trim();
   const smtpSecure = process.env.SMTP_SECURE === 'true' || smtpPort === 465;
 
-  const adminRecipient = process.env.NOTIFICATION_EMAIL || gmailUser || 'dynodazzle@gmail.com';
-  const fromEmail = gmailUser ? `DynoDazzle <${gmailUser}>` : (process.env.SMTP_FROM || 'DynoDazzle <no-reply@dynodazzle.in>');
+  const hasSmtp = Boolean(smtpHost && smtpUser && smtpPass);
 
-  let transporter: Transporter | null = null;
+  let mode: 'gmail' | 'smtp' | 'none' = 'none';
+  if (hasValidGmailPass) {
+    mode = 'gmail';
+  } else if (hasSmtp) {
+    mode = 'smtp';
+  }
 
-  // 1. Check if Gmail is configured via GMAIL_USER + GMAIL_APP_PASSWORD
-  if (gmailUser && gmailPass) {
-    console.log(`[EmailService] Creating Gmail transport using account: ${gmailUser}`);
-    transporter = nodemailer.createTransport({
+  return {
+    gmailUser,
+    gmailPass: hasValidGmailPass ? cleanPass : null,
+    smtpHost,
+    smtpPort,
+    smtpUser,
+    smtpPass,
+    smtpSecure,
+    isConfigured: mode !== 'none',
+    mode,
+  };
+}
+
+/**
+ * Returns safe status for dashboard display
+ */
+export function getEmailConfigStatus(): {
+  account: string;
+  configured: boolean;
+  mode: 'gmail' | 'smtp' | 'none';
+  maskedPassword: string;
+  notificationEmail: string;
+  updatedAt?: string;
+} {
+  const creds = getEmailCredentials();
+  const stored = getStoredEmailConfig();
+  const rawPass = creds.gmailPass || '';
+  let masked = '';
+  if (rawPass.length >= 8) {
+    masked = `${rawPass.slice(0, 4)} •••• •••• ${rawPass.slice(-4)}`;
+  } else if (rawPass.length > 0) {
+    masked = '••••••••••••••••';
+  }
+
+  const adminRecipient =
+    stored.notificationEmail ||
+    process.env.NOTIFICATION_EMAIL ||
+    creds.gmailUser ||
+    'dynodazzle@gmail.com';
+
+  return {
+    account: creds.gmailUser,
+    configured: creds.isConfigured,
+    mode: creds.mode,
+    maskedPassword: masked,
+    notificationEmail: adminRecipient,
+    updatedAt: stored.updatedAt,
+  };
+}
+
+/**
+ * Updates email credentials from the admin dashboard and validates them
+ */
+export async function updateEmailCredentials(params: {
+  gmailAppPassword?: string;
+  gmailUser?: string;
+  notificationEmail?: string;
+}): Promise<{
+  success: boolean;
+  message: string;
+  status: ReturnType<typeof getEmailConfigStatus>;
+  testResult: { success: boolean; message: string };
+}> {
+  const current = getStoredEmailConfig();
+  const updated: StoredEmailConfig = {
+    ...current,
+    updatedAt: new Date().toISOString(),
+  };
+
+  if (params.gmailUser !== undefined && params.gmailUser.trim()) {
+    updated.gmailUser = params.gmailUser.trim();
+    process.env.GMAIL_USER = updated.gmailUser;
+  }
+
+  if (params.notificationEmail !== undefined && params.notificationEmail.trim()) {
+    updated.notificationEmail = params.notificationEmail.trim();
+    process.env.NOTIFICATION_EMAIL = updated.notificationEmail;
+  }
+
+  if (params.gmailAppPassword !== undefined) {
+    let cleanPass = params.gmailAppPassword.trim();
+    if (cleanPass.startsWith('"') && cleanPass.endsWith('"')) {
+      cleanPass = cleanPass.slice(1, -1).trim();
+    }
+    cleanPass = cleanPass.replace(/\s+/g, '');
+    updated.gmailAppPassword = cleanPass;
+    process.env.GMAIL_APP_PASSWORD = cleanPass;
+
+    // Also attempt to update .env if writable
+    try {
+      const envPath = path.join(process.cwd(), '.env');
+      if (fs.existsSync(envPath)) {
+        let envContent = fs.readFileSync(envPath, 'utf-8');
+        if (envContent.includes('GMAIL_APP_PASSWORD=')) {
+          envContent = envContent.replace(
+            /GMAIL_APP_PASSWORD=.*$/m,
+            `GMAIL_APP_PASSWORD="${cleanPass}"`
+          );
+        } else {
+          envContent += `\nGMAIL_APP_PASSWORD="${cleanPass}"\n`;
+        }
+        fs.writeFileSync(envPath, envContent, 'utf-8');
+      }
+    } catch {
+      // non-fatal in read-only environments
+    }
+  }
+
+  saveStoredEmailConfig(updated);
+
+  // Test the newly saved connection
+  const testRes = await testEmailConnection();
+
+  return {
+    success: true,
+    message: testRes.success
+      ? 'Gmail credentials saved and verified successfully!'
+      : 'Credentials saved, but verification failed: ' + testRes.message,
+    status: getEmailConfigStatus(),
+    testResult: {
+      success: testRes.success,
+      message: testRes.message,
+    },
+  };
+}
+
+/**
+ * Creates or gets an active email transporter
+ */
+export function getEmailTransporter(): Transporter | null {
+  const creds = getEmailCredentials();
+  if (!creds.isConfigured) {
+    return null;
+  }
+
+  if (creds.mode === 'gmail' && creds.gmailPass) {
+    return nodemailer.createTransport({
       service: 'gmail',
       auth: {
-        user: gmailUser,
-        pass: gmailPass,
+        user: creds.gmailUser,
+        pass: creds.gmailPass,
       },
     });
-  } else if (smtpHost && smtpUser && smtpPass) {
-    // 2. Fallback to generic SMTP
-    console.log(`[EmailService] Creating SMTP transport using host: ${smtpHost}:${smtpPort}`);
-    transporter = nodemailer.createTransport({
-      host: smtpHost,
-      port: smtpPort,
-      secure: smtpSecure,
+  }
+
+  if (creds.mode === 'smtp' && creds.smtpHost && creds.smtpUser && creds.smtpPass) {
+    return nodemailer.createTransport({
+      host: creds.smtpHost,
+      port: creds.smtpPort,
+      secure: creds.smtpSecure,
       auth: {
-        user: smtpUser,
-        pass: smtpPass,
+        user: creds.smtpUser,
+        pass: creds.smtpPass,
       },
       tls: {
         rejectUnauthorized: false,
@@ -64,17 +271,89 @@ export async function sendEnquiryEmails(params: SendEnquiryEmailsParams): Promis
     });
   }
 
-  // If no transport credentials are configured
+  return null;
+}
+
+/**
+ * Diagnoses and tests the SMTP connection status
+ */
+export async function testEmailConnection(): Promise<{
+  success: boolean;
+  configured: boolean;
+  message: string;
+  account: string;
+  mode: 'gmail' | 'smtp' | 'none';
+}> {
+  const creds = getEmailCredentials();
+
+  if (!creds.isConfigured) {
+    return {
+      success: false,
+      configured: false,
+      message: 'Gmail App Password is not set. To send emails directly from dynodazzle@gmail.com, generate a 16-character App Password at https://myaccount.google.com/apppasswords and set GMAIL_APP_PASSWORD.',
+      account: creds.gmailUser,
+      mode: 'none',
+    };
+  }
+
+  const transporter = getEmailTransporter();
   if (!transporter) {
-    console.log('[EmailService] Neither Gmail (GMAIL_USER & GMAIL_APP_PASSWORD) nor SMTP credentials are set in environment.');
-    console.log(`[EmailService] In local dev mode: would send notification to: ${adminRecipient}`);
-    console.log(`[EmailService] In local dev mode: would send confirmation email to: ${email}`);
-    console.log(`[EmailService] Lead details: ${name} | ${phone} | ${service} | ${budget}`);
+    return {
+      success: false,
+      configured: false,
+      message: 'Email transporter could not be initialized.',
+      account: creds.gmailUser,
+      mode: creds.mode,
+    };
+  }
+
+  try {
+    await transporter.verify();
+    return {
+      success: true,
+      configured: true,
+      message: `Verified successfully! Email service is active and ready on ${creds.gmailUser}.`,
+      account: creds.gmailUser,
+      mode: creds.mode,
+    };
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    const is535 = errMsg.includes('535') || errMsg.includes('Invalid login') || errMsg.includes('BadCredentials');
+
+    return {
+      success: false,
+      configured: true,
+      message: is535
+        ? 'Google rejected login (535 Bad Credentials). Ensure 2-Step Verification is active on the account and create a fresh 16-letter App Password at https://myaccount.google.com/apppasswords.'
+        : `Email server test failed: ${errMsg}`,
+      account: creds.gmailUser,
+      mode: creds.mode,
+    };
+  }
+}
+
+/**
+ * Dispatches enquiry confirmation and admin notification emails
+ */
+export async function sendEnquiryEmails(params: SendEnquiryEmailsParams): Promise<EmailResult> {
+  const { name, email, phone, company, service, budget, message, enquiryId } = params;
+  const creds = getEmailCredentials();
+  const stored = getStoredEmailConfig();
+
+  const adminRecipient = stored.notificationEmail || process.env.NOTIFICATION_EMAIL || creds.gmailUser || 'dynodazzle@gmail.com';
+  const fromEmail = creds.gmailUser ? `DynoDazzle <${creds.gmailUser}>` : 'DynoDazzle <dynodazzle@gmail.com>';
+
+  const transporter = getEmailTransporter();
+
+  // If no transport credentials are configured
+  if (!transporter || !creds.isConfigured) {
+    console.log('[EmailService] Gmail credentials (GMAIL_APP_PASSWORD) not configured. Lead recorded in database.');
+    console.log(`[EmailService] Pending notification: #${enquiryId} from ${name} (${phone}, ${service})`);
 
     return {
       success: true,
       emailSent: false,
-      message: 'Enquiry recorded. Gmail credentials (GMAIL_USER, GMAIL_APP_PASSWORD) not configured on host.',
+      message: 'Enquiry recorded successfully. (Email notification pending GMAIL_APP_PASSWORD setup).',
     };
   }
 
@@ -186,8 +465,8 @@ export async function sendEnquiryEmails(params: SendEnquiryEmailsParams): Promis
       transporter.sendMail(userMailOptions),
     ]);
 
-    console.log(`[EmailService] Admin email sent: ${adminInfo.messageId}`);
-    console.log(`[EmailService] Client confirmation email sent to ${email}: ${userInfo.messageId}`);
+    console.log(`[EmailService] Admin notification sent: ${adminInfo.messageId}`);
+    console.log(`[EmailService] Client confirmation sent to ${email}: ${userInfo.messageId}`);
 
     return {
       success: true,
@@ -195,74 +474,58 @@ export async function sendEnquiryEmails(params: SendEnquiryEmailsParams): Promis
       message: 'Confirmation and notification emails sent successfully via Gmail/SMTP.',
     };
   } catch (error: unknown) {
-    console.error('[EmailService] Email delivery failed:', error);
+    const errMsg = error instanceof Error ? error.message : String(error);
+    const is535 = errMsg.includes('535') || errMsg.includes('Invalid login') || errMsg.includes('BadCredentials');
+
+    if (is535) {
+      console.warn(`[EmailService] Gmail SMTP rejected authentication (535 Bad Credentials). Update GMAIL_APP_PASSWORD.`);
+    } else {
+      console.error('[EmailService] Email delivery failed:', errMsg);
+    }
+
     return {
-      success: false,
+      success: true, // Lead is safely stored
       emailSent: false,
-      message: error instanceof Error ? error.message : 'Email delivery error',
+      message: is535
+        ? 'Enquiry recorded. Gmail authentication failed (535 Bad Credentials); check GMAIL_APP_PASSWORD.'
+        : `Enquiry recorded. Email notification error: ${errMsg}`,
     };
   }
 }
 
 /**
- * Creates or gets the active email transporter
+ * Sends a 6-digit OTP for admin login verification.
+ * Gracefully reports success/failure without throwing unhandled errors.
  */
-export function getEmailTransporter(): Transporter | null {
-  const gmailUser = (
-    process.env.GMAIL_USER ||
-    (process.env.SMTP_USER && process.env.SMTP_USER.includes('@gmail.com') ? process.env.SMTP_USER : undefined) ||
-    'dynodazzle@gmail.com'
-  ).trim();
-  const rawGmailPass = (
-    process.env.GMAIL_APP_PASSWORD ||
-    process.env.SMTP_PASSWORD ||
-    'jshs kpmh yfrh sbbn'
-  ).trim();
-  const gmailPass = rawGmailPass.replace(/\s+/g, '');
+export async function sendAdminOtpEmail(
+  toEmail: string,
+  otpCode: string
+): Promise<{
+  success: boolean;
+  reason?: 'not_configured' | 'invalid_credentials' | 'send_failure';
+  error?: string;
+}> {
+  const creds = getEmailCredentials();
 
-  if (gmailUser && gmailPass) {
-    return nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: gmailUser,
-        pass: gmailPass,
-      },
-    });
+  if (!creds.isConfigured) {
+    console.warn(`[EmailService] Email delivery not configured. Generated Admin OTP for ${toEmail}: ${otpCode}`);
+    return {
+      success: false,
+      reason: 'not_configured',
+      error: 'Gmail App Password is not configured in GMAIL_APP_PASSWORD environment variable.',
+    };
   }
 
-  const smtpHost = process.env.SMTP_HOST;
-  const smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
-  const smtpUser = process.env.SMTP_USER;
-  const smtpPass = process.env.SMTP_PASSWORD;
-  const smtpSecure = process.env.SMTP_SECURE === 'true' || smtpPort === 465;
-
-  if (smtpHost && smtpUser && smtpPass) {
-    return nodemailer.createTransport({
-      host: smtpHost,
-      port: smtpPort,
-      secure: smtpSecure,
-      auth: {
-        user: smtpUser,
-        pass: smtpPass,
-      },
-    });
-  }
-
-  return null;
-}
-
-/**
- * Sends a 6-digit OTP to dynodazzle@gmail.com for admin login verification
- */
-export async function sendAdminOtpEmail(toEmail: string, otpCode: string): Promise<boolean> {
   const transporter = getEmailTransporter();
-  const gmailUser = (process.env.GMAIL_USER || 'dynodazzle@gmail.com').trim();
-  const fromEmail = `DynoDazzle Security <${gmailUser}>`;
-
   if (!transporter) {
-    console.warn('[EmailService] Transporter not configured. Simulation OTP:', otpCode);
-    return false;
+    return {
+      success: false,
+      reason: 'not_configured',
+      error: 'Transporter creation failed.',
+    };
   }
+
+  const fromEmail = `DynoDazzle Security <${creds.gmailUser}>`;
 
   try {
     const mailOptions = {
@@ -281,7 +544,7 @@ export async function sendAdminOtpEmail(toEmail: string, otpCode: string): Promi
             <div style="font-size: 36px; font-weight: 800; letter-spacing: 8px; color: #38bdf8; font-family: monospace; background: #0b1329; padding: 14px 20px; border-radius: 8px; display: inline-block; border: 1px solid #1e293b;">
               ${otpCode}
             </div>
-            <p style="color: #64748b; font-size: 12px; margin: 12px 0 0 0;">Valid for <strong>10 minutes</strong>. Do not disclose this code to anyone.</p>
+            <p style="color: #64748b; font-size: 12px; margin: 12px 0 0 0;">Valid for <strong>15 minutes</strong>. Do not disclose this code to anyone.</p>
           </div>
 
           <p style="color: #cbd5e1; font-size: 13px; line-height: 1.6;">
@@ -297,11 +560,25 @@ export async function sendAdminOtpEmail(toEmail: string, otpCode: string): Promi
     };
 
     const info = await transporter.sendMail(mailOptions);
-    console.log(`[EmailService] OTP email sent to ${toEmail}. Message ID: ${info.messageId}`);
-    return true;
-  } catch (err) {
-    console.error('[EmailService] Failed to send admin OTP email:', err);
-    return false;
+    console.log(`[EmailService] Admin OTP email dispatched to ${toEmail}. Message ID: ${info.messageId}`);
+    return { success: true };
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    const is535 = errMsg.includes('535') || errMsg.includes('Invalid login') || errMsg.includes('BadCredentials');
+
+    if (is535) {
+      console.warn(`[EmailService] Gmail SMTP rejected credentials (535 Bad Credentials) when dispatching OTP to ${toEmail}. Admin OTP is: ${otpCode}`);
+    } else {
+      console.error('[EmailService] Failed to send admin OTP email:', errMsg);
+    }
+
+    return {
+      success: false,
+      reason: is535 ? 'invalid_credentials' : 'send_failure',
+      error: is535
+        ? 'Invalid Gmail login (535 Bad Credentials). Ensure 2-Step Verification is active and generate an App Password at https://myaccount.google.com/apppasswords.'
+        : errMsg,
+    };
   }
 }
 
@@ -316,20 +593,24 @@ export async function sendAdminReplyEmail(params: {
   enquiryId?: string;
 }): Promise<{ success: boolean; error?: string }> {
   const { clientEmail, clientName, subject, messageBody, enquiryId } = params;
+  const creds = getEmailCredentials();
   const transporter = getEmailTransporter();
-  const gmailUser = (process.env.GMAIL_USER || 'dynodazzle@gmail.com').trim();
-  const fromEmail = `DynoDazzle <${gmailUser}>`;
 
-  if (!transporter) {
-    return { success: false, error: 'Email transporter not configured' };
+  if (!transporter || !creds.isConfigured) {
+    return {
+      success: false,
+      error: 'Email transporter not configured. Please configure GMAIL_APP_PASSWORD in environment or settings to send client replies.',
+    };
   }
+
+  const fromEmail = `DynoDazzle <${creds.gmailUser}>`;
 
   try {
     const mailOptions = {
       from: fromEmail,
       to: clientEmail,
-      cc: gmailUser,
-      replyTo: gmailUser,
+      cc: creds.gmailUser,
+      replyTo: creds.gmailUser,
       subject: subject || `Regarding your enquiry with DynoDazzle`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #070b14; color: #f1f5f9; padding: 32px; border-radius: 14px; border: 1px solid #1e293b;">
@@ -363,12 +644,18 @@ ${messageBody}
     };
 
     const info = await transporter.sendMail(mailOptions);
-    console.log(`[EmailService] Admin reply email sent to ${clientEmail}. Message ID: ${info.messageId}`);
+    console.log(`[EmailService] Admin reply sent to ${clientEmail}. Message ID: ${info.messageId}`);
     return { success: true };
-  } catch (err) {
+  } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
+    const is535 = msg.includes('535') || msg.includes('Invalid login') || msg.includes('BadCredentials');
+
     console.error('[EmailService] Failed to send admin reply email:', msg);
-    return { success: false, error: msg };
+    return {
+      success: false,
+      error: is535
+        ? 'Gmail rejected credentials (535 Bad Credentials). Please verify your Google App Password.'
+        : msg,
+    };
   }
 }
-

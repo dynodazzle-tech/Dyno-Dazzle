@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { SITE_CONFIG } from '../config/site';
 import { Menu, X, ArrowRight, Sparkles, Lock } from 'lucide-react';
+import { DynoDazzleLogo } from './DynoDazzleLogo';
 
 interface HeaderProps {
   onStartProjectClick?: () => void;
@@ -34,8 +35,8 @@ export const Header: React.FC<HeaderProps> = ({ onStartProjectClick, onOpenAdmin
   const navLinks = [
     { label: 'Home', href: '#home' },
     { label: 'Services', href: '#services' },
-    { label: 'Work', href: '#projects' },
     { label: 'Solutions', href: '#solutions' },
+    { label: 'Projects', href: '#projects' },
     { label: 'Ecosystem', href: '#ecosystem' },
     { label: 'About', href: '#about' },
     { label: 'Contact', href: '#contact' },
@@ -76,26 +77,10 @@ export const Header: React.FC<HeaderProps> = ({ onStartProjectClick, onOpenAdmin
             e.preventDefault();
             handleNavClick('#home');
           }}
-          className="flex items-center gap-3 group focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 rounded-lg p-1"
+          className="group focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 rounded-lg p-1"
           aria-label="DynoDazzle Home"
         >
-          <div className="relative w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 via-blue-600 to-indigo-600 p-[1.5px] flex items-center justify-center shadow-lg shadow-cyan-500/20 group-hover:shadow-cyan-500/40 transition-shadow">
-            <div className="w-full h-full bg-[#070b14] rounded-[10px] flex items-center justify-center">
-              <span className="font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400 text-xl tracking-tighter">
-                D
-              </span>
-            </div>
-            <div className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping opacity-75" />
-            <div className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-cyan-400" />
-          </div>
-          <div className="flex flex-col">
-            <span className="text-xl font-bold tracking-tight text-white group-hover:text-cyan-300 transition-colors">
-              {SITE_CONFIG.companyName}
-            </span>
-            <span className="text-[10px] font-medium uppercase tracking-widest text-cyan-400/80 -mt-1">
-              Technology & Digital
-            </span>
-          </div>
+          <DynoDazzleLogo size="md" />
         </a>
 
         {/* Desktop Navigation */}

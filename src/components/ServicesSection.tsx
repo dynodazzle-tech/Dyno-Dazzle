@@ -33,17 +33,16 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({ onSelectServic
 
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
-        <div className="text-center max-w-3xl mx-auto mb-14">
+        <div className="text-center max-w-3xl mx-auto mb-12">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-950/60 border border-cyan-500/30 text-cyan-300 text-xs font-semibold uppercase tracking-wider mb-4">
             <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Full-Cycle Digital Capabilities</span>
+            <span>Core Digital Architecture</span>
           </div>
-          <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-white tracking-tight mb-5">
-            Everything You Need to Build Digital
+          <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-white tracking-tight mb-4">
+            Digital Services Designed Around You
           </h2>
-          <p className="text-base sm:text-lg text-slate-400 leading-relaxed">
-            From technical infrastructure and bespoke applications to high-impact marketing and AI workflows,
-            we engineer robust digital foundations designed to scale.
+          <p className="text-base sm:text-lg text-slate-300 leading-relaxed">
+            From technical infrastructure and bespoke applications to high-impact marketing and AI workflows.
           </p>
 
           {/* Filter Pills */}

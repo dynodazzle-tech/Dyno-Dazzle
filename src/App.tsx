@@ -2,13 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
 import { Hero } from './components/Hero';
 import { ServicesSection } from './components/ServicesSection';
-import { ServicesVisualization } from './components/ServicesVisualization';
+import { HowWeHelpSection } from './components/HowWeHelpSection';
 import { ProjectsSection } from './components/ProjectsSection';
-import { WhyDynoDazzle } from './components/WhyDynoDazzle';
-import { ProcessSection } from './components/ProcessSection';
 import { EcosystemSection } from './components/EcosystemSection';
+import { WhyDynoDazzle } from './components/WhyDynoDazzle';
 import { AboutSection } from './components/AboutSection';
-import { TechnologySection } from './components/TechnologySection';
 import { ContactSection } from './components/ContactSection';
 import { Footer } from './components/Footer';
 import { WhatsAppFloatingButton } from './components/WhatsAppFloatingButton';
@@ -81,7 +79,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#05070d] text-slate-100 flex flex-col font-sans selection:bg-cyan-500/30 selection:text-cyan-200">
-      {/* Top Fixed Header */}
+      {/* Top Fixed Sticky Glass Header */}
       <Header
         onStartProjectClick={() => scrollToSection('#contact')}
         onOpenAdmin={() => setAdminModalOpen(true)}
@@ -89,37 +87,29 @@ export default function App() {
 
       {/* Main Page Sections */}
       <main className="flex-grow">
-        {/* Hero Section */}
+        {/* 1. Hero Section (Digital Technology Command Center) */}
         <Hero
           onStartProject={() => scrollToSection('#contact')}
           onExploreServices={() => scrollToSection('#services')}
         />
 
-        {/* Services Cards */}
+        {/* 2. Services Section (Interactive Grid) */}
         <ServicesSection onSelectServiceForContact={handleSelectService} />
 
-        {/* Interactive Ecosystem Visualization */}
-        <ServicesVisualization onSelectService={handleSelectService} />
+        {/* 3. How We Help Section (3 Core Transformation Pillars) */}
+        <HowWeHelpSection onSelectServiceForContact={handleSelectService} />
 
-        {/* Dynamic Showcase Portfolio Projects (Admin Managed) */}
+        {/* 4. Projects Portfolio (Directly Managed by Admin Dashboard) */}
         <ProjectsSection onSelectProjectForContact={handleSelectService} />
 
-        {/* Why DynoDazzle Pillars */}
-        <WhyDynoDazzle />
-
-        {/* 5-Step Process Timeline */}
-        <ProcessSection />
-
-        {/* DynoDazzle Ecosystem (featuring TechClass & Future Subdomains) */}
+        {/* 5. DynoDazzle Ecosystem (Featuring TechClass & Subdomain Roadmap) */}
         <EcosystemSection />
 
-        {/* Technology Categorization */}
-        <TechnologySection />
-
-        {/* About DynoDazzle */}
+        {/* 6. Why DynoDazzle & About (Engineering Value Pillars & Core Principles) */}
+        <WhyDynoDazzle />
         <AboutSection />
 
-        {/* Contact Section & Live Backend Form */}
+        {/* 7. Contact Section (Direct Channels & Preserved Form Backend) */}
         <ContactSection initialService={selectedServiceForContact} />
       </main>
 
@@ -142,7 +132,7 @@ export default function App() {
         onSwitchTab={setLegalModalTab}
       />
 
-      {/* Admin Dashboard & 2-Factor OTP Modal */}
+      {/* Admin Dashboard & 2-Factor OTP Modal (Preserved Alt+A / #admin portal) */}
       <AdminModal
         isOpen={adminModalOpen}
         onClose={() => {

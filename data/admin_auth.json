@@ -1,4 +1,23 @@
 {
   "pendingOtps": {},
-  "activeSessions": {}
+  "activeSessions": {
+    "f810760f78f4e8cc897f555a99248636377266295ec40e71d467dd885d3b1b31": {
+      "token": "f810760f78f4e8cc897f555a99248636377266295ec40e71d467dd885d3b1b31",
+      "email": "dynodazzle@gmail.com",
+      "createdAt": 1789591056606,
+      "expiresAt": 1789677456606
+    },
+    "91a5d757c3cc0a4fd701f12698fe7f31839d4e46959f639cce961afe1fe08737": {
+      "token": "91a5d757c3cc0a4fd701f12698fe7f31839d4e46959f639cce961afe1fe08737",
+      "email": "dynodazzle@gmail.com",
+      "createdAt": 1789592098346,
+      "expiresAt": 1789678582440
+    },
+    "1c0dff8f12f1107831d1c056c666fd498362ac5b5ccc21e211ce987e2d17c666": {
+      "token": "1c0dff8f12f1107831d1c056c666fd498362ac5b5ccc21e211ce987e2d17c666",
+      "email": "dynodazzle@gmail.com",
+      "createdAt": 1789592329539,
+      "expiresAt": 1789678729539
+    }
+  }
 }
