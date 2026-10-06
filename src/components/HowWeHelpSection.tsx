@@ -25,7 +25,7 @@ export const HowWeHelpSection: React.FC<HowWeHelpSectionProps> = ({ onSelectServ
       description:
         'Fast, accessible, and conversion-engineered web portals and cross-platform mobile apps for iOS & Android.',
       items: [
-        'Custom high-performance websites (<1s load time)',
+        'Conversion-focused business websites',
         'Full-stack web applications & client dashboards',
         'Cross-platform iOS and Android mobile apps',
       ],
@@ -56,7 +56,7 @@ export const HowWeHelpSection: React.FC<HowWeHelpSectionProps> = ({ onSelectServ
         'Targeted digital marketing funnels coupled with dedicated 24/7 technical troubleshooting and system maintenance.',
       items: [
         'Performance marketing & high-conversion lead generation',
-        '24/7 responsive ticketing & incident troubleshooting',
+        'Responsive technical support & troubleshooting',
         'System health audits & IT architecture advisory',
       ],
       serviceTarget: 'Technical Support',
