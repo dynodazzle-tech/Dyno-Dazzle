@@ -46,20 +46,20 @@ export const Hero: React.FC<HeroProps> = ({ onStartProject, onExploreServices })
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
               </span>
-              <span>Digital Technology Command Center</span>
+              <span>Digital Growth & Automation Partner</span>
             </div>
 
             {/* Headline */}
             <h1 className="text-3xl sm:text-5xl md:text-5xl lg:text-[3.75rem] font-extrabold tracking-tight text-white leading-[1.12] mb-5">
-              Technology That Makes Your Business{' '}
+              Turn More Digital Opportunities Into{' '}
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-sky-300 to-indigo-400">
-                Move.
+                Growth.
               </span>
             </h1>
 
             {/* Supporting Text */}
             <p className="text-base sm:text-lg text-slate-300 leading-relaxed max-w-2xl mb-7">
-              Digital solutions, websites, applications, automation and technical support designed around your business.
+              We build websites, lead-generation systems and business automation that help you attract customers, follow up faster and operate more efficiently.
             </p>
 
             {/* Call to Actions */}
@@ -69,7 +69,7 @@ export const Hero: React.FC<HeroProps> = ({ onStartProject, onExploreServices })
                 onClick={onStartProject}
                 className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-bold text-sm sm:text-base text-slate-900 bg-gradient-to-r from-cyan-400 via-sky-300 to-blue-400 shadow-lg shadow-cyan-500/25 hover:shadow-cyan-400/40 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
               >
-                <span>Start a Project</span>
+                <span>Get a Free Growth Audit</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
 
@@ -78,7 +78,7 @@ export const Hero: React.FC<HeroProps> = ({ onStartProject, onExploreServices })
                 onClick={onExploreServices}
                 className="inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-xl font-semibold text-sm sm:text-base text-slate-200 bg-slate-900/80 border border-slate-700 hover:border-cyan-500/50 hover:bg-slate-800/80 transition-all cursor-pointer"
               >
-                <span>Explore Services</span>
+                <span>See How We Can Help</span>
               </button>
 
               <a
