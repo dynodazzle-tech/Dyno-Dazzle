@@ -1,6 +1,6 @@
 import React from 'react';
 import { SITE_CONFIG } from '../config/site';
-import { ShieldCheck, ArrowLeft } from './Icon';
+import { ShieldCheck } from './Icon';
 
 export const DataDeletionPage: React.FC = () => {
   return (
@@ -10,8 +10,7 @@ export const DataDeletionPage: React.FC = () => {
           href="/"
           className="inline-flex items-center gap-2 text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
         >
-          <ArrowLeft className="h-4 w-4" />
-          Back to DynoDazzle
+          ← Back to DynoDazzle
         </a>
 
         <div className="mt-10 rounded-3xl border border-slate-700/80 bg-[#080d1a] p-7 shadow-2xl sm:p-10">
