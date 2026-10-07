@@ -12,6 +12,7 @@ import { Footer } from './components/Footer';
 import { WhatsAppFloatingButton } from './components/WhatsAppFloatingButton';
 import { LegalModal } from './components/LegalModal';
 import { AdminModal } from './components/Admin/AdminModal';
+import { DataDeletionPage } from './components/DataDeletionPage';
 
 export default function App() {
   const [selectedServiceForContact, setSelectedServiceForContact] = useState<string>('');
@@ -76,6 +77,10 @@ export default function App() {
     setLegalModalTab(tab);
     setLegalModalOpen(true);
   };
+
+  if (window.location.pathname === '/data-deletion') {
+    return <DataDeletionPage />;
+  }
 
   return (
     <div className="min-h-screen bg-[#05070d] text-slate-100 flex flex-col font-sans selection:bg-cyan-500/30 selection:text-cyan-200">
