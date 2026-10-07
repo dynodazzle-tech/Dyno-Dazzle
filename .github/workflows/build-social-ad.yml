@@ -1,0 +1,22 @@
+name: Build DynoDazzle Instagram Ad PNG
+on:
+  push:
+    paths:
+      - 'public/social/dynodazzle-instagram-ad.svg'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Render PNG
+        run: convert -background none public/social/dynodazzle-instagram-ad.svg -resize 1080x1080 public/social/dynodazzle-instagram-ad.png
+      - name: Commit PNG
+        run: |
+          git config user.name "DynoDazzle Automation"
+          git config user.email "dynodazzle@gmail.com"
+          git add public/social/dynodazzle-instagram-ad.png
+          git diff --cached --quiet || git commit -m "Add DynoDazzle Instagram ad PNG"
+          git push
