@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { SITE_CONFIG } from '../config/site';
-import { Menu, X, ArrowRight, Sparkles, Lock } from 'lucide-react';
+import { Menu, X, ArrowRight, Sparkles, Lock, Sun, Moon } from 'lucide-react';
 import { DynoDazzleLogo } from './DynoDazzleLogo';
 
 interface HeaderProps {
   onStartProjectClick?: () => void;
   onOpenAdmin?: () => void;
+  lightMode?: boolean;
+  onToggleTheme?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ onStartProjectClick, onOpenAdmin }) => {
+export const Header: React.FC<HeaderProps> = ({ onStartProjectClick, onOpenAdmin, lightMode = true, onToggleTheme }) => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -98,18 +100,6 @@ export const Header: React.FC<HeaderProps> = ({ onStartProjectClick, onOpenAdmin
 
         {/* Action Button & Subdomain Pill */}
         <div className="hidden md:flex items-center gap-3">
-          <a
-            href={SITE_CONFIG.techClassUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs font-semibold px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 hover:bg-indigo-500/20 transition-all flex items-center gap-1.5"
-            title="DynoDazzle Ecosystem Platform"
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
-            <span>TechClass</span>
-            <span className="text-[10px] text-indigo-400 font-mono">.in</span>
-          </a>
-
           <button
             id="header-start-project-btn"
             onClick={handleStartProject}
@@ -119,6 +109,18 @@ export const Header: React.FC<HeaderProps> = ({ onStartProjectClick, onOpenAdmin
             <span>Start a Project</span>
             <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
           </button>
+
+          {onToggleTheme && (
+            <button
+              type="button"
+              onClick={onToggleTheme}
+              className="p-2.5 rounded-xl border border-slate-700/70 text-slate-400 hover:text-cyan-500 hover:bg-slate-800/20 transition-colors"
+              title={lightMode ? "Switch to dark mode" : "Switch to light mode"}
+              aria-label={lightMode ? "Switch to dark mode" : "Switch to light mode"}
+            >
+              {lightMode ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+            </button>
+          )}
 
           {onOpenAdmin && (
             <button
@@ -167,23 +169,7 @@ export const Header: React.FC<HeaderProps> = ({ onStartProjectClick, onOpenAdmin
               </button>
             ))}
 
-            <div className="pt-4 border-t border-slate-800/80 mt-4">
-              <div className="text-xs font-semibold uppercase tracking-wider text-indigo-400 px-3 pb-2">
-                Ecosystem Platforms
-              </div>
-              <a
-                href={SITE_CONFIG.techClassUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-between px-4 py-3 rounded-xl bg-indigo-950/30 border border-indigo-500/20 text-indigo-300 font-medium text-sm"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                  <span>TechClass Platform</span>
-                </div>
-                <span className="text-xs text-indigo-400 font-mono">techclass.dynodazzle.in</span>
-              </a>
-            </div>
+>
           </div>
 
           <div className="pt-6 pb-4 space-y-3">
@@ -195,6 +181,16 @@ export const Header: React.FC<HeaderProps> = ({ onStartProjectClick, onOpenAdmin
               <span>Start a Project</span>
               <ArrowRight className="w-4 h-4" />
             </button>
+            {onToggleTheme && (
+              <button
+                type="button"
+                onClick={onToggleTheme}
+                className="w-full py-2.5 px-4 rounded-xl border border-slate-700/70 text-xs font-medium text-slate-400 flex items-center justify-center gap-2"
+              >
+                {lightMode ? <Moon className="w-3.5 h-3.5" /> : <Sun className="w-3.5 h-3.5" />}
+                <span>{lightMode ? "Dark Mode" : "Light Mode"}</span>
+              </button>
+            )}
             <div className="text-center text-xs text-slate-500">
               Direct Contact: <a href={`mailto:${SITE_CONFIG.email}`} className="text-cyan-400 underline">{SITE_CONFIG.email}</a>
             </div>
