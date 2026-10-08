@@ -80,7 +80,7 @@ export const SITE_CONFIG = {
         ├── ServicesVisualization.tsx# Interactive orbital tech nexus
         ├── WhyDynoDazzle.tsx        # 6 core value pillars
         ├── ProcessSection.tsx       # 5-stage timeline from Discover to Support
-        ├── EcosystemSection.tsx     # Featured TechClass platform & upcoming platforms
+        ├── EcosystemSection.tsx     # Future DynoDazzle products and platforms
         ├── TechnologySection.tsx    # Categorized technology stack
         ├── AboutSection.tsx         # Mission, principles & execution scope
         ├── ContactSection.tsx       # Live backend contact form with feedback & WhatsApp
