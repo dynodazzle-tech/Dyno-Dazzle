@@ -19,6 +19,11 @@ export default function App() {
   const [legalModalOpen, setLegalModalOpen] = useState<boolean>(false);
   const [legalModalTab, setLegalModalTab] = useState<'privacy' | 'terms'>('privacy');
   const [adminModalOpen, setAdminModalOpen] = useState<boolean>(false);
+  const [lightMode, setLightMode] = useState<boolean>(() => localStorage.getItem('dynodazzle-theme') !== 'dark');
+
+  useEffect(() => {
+    localStorage.setItem('dynodazzle-theme', lightMode ? 'light' : 'dark');
+  }, [lightMode]);
 
   // Auto-open admin if navigated to #admin or /admin or pressed Alt+A
   useEffect(() => {
@@ -83,11 +88,14 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#05070d] text-slate-100 flex flex-col font-sans selection:bg-cyan-500/30 selection:text-cyan-200">
+    <div className={`${lightMode ? 'theme-light' : 'theme-dark'} min-h-screen bg-[#05070d] text-slate-100 flex flex-col font-sans selection:bg-cyan-500/30 selection:text-cyan-200`}>
+
       {/* Top Fixed Sticky Glass Header */}
       <Header
         onStartProjectClick={() => scrollToSection('#contact')}
         onOpenAdmin={() => setAdminModalOpen(true)}
+        lightMode={lightMode}
+        onToggleTheme={() => setLightMode((prev) => !prev)}
       />
 
       {/* Main Page Sections */}
@@ -107,7 +115,7 @@ export default function App() {
         {/* 4. Projects Portfolio (Directly Managed by Admin Dashboard) */}
         <ProjectsSection onSelectProjectForContact={handleSelectService} />
 
-        {/* 5. DynoDazzle Ecosystem (Featuring TechClass & Subdomain Roadmap) */}
+        {/* 5. DynoDazzle Ecosystem */}
         <EcosystemSection />
 
         {/* 6. Why DynoDazzle & About (Engineering Value Pillars & Core Principles) */}
