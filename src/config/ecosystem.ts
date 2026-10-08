@@ -1,24 +1,6 @@
 import { EcosystemProduct } from '../types';
-import { SITE_CONFIG } from './site';
 
 export const ECOSYSTEM_PRODUCTS: EcosystemProduct[] = [
-  {
-    id: "techclass",
-    name: "TechClass",
-    type: "Education Platform",
-    subdomain: "techclass.dynodazzle.in",
-    url: SITE_CONFIG.techClassUrl,
-    status: "live",
-    badge: "Active Platform",
-    description:
-      "TechClass is an education platform under the DynoDazzle ecosystem, designed to help students prepare through test papers, PDFs, mock tests, practice material and digital learning resources.",
-    highlights: [
-      "Test papers & previous-year papers",
-      "Curated PDF study material & notes",
-      "Full-length mock tests & timed practice",
-      "Accessible digital study resources",
-    ],
-  },
   {
     id: "labs",
     name: "DynoDazzle Labs",
